@@ -1,0 +1,32 @@
+[
+    {
+        "pregnancies": "5",
+        "glucose": "166",
+        "bloodpresure": "72",
+        "skinthickness": "19",
+        "insulin": "175",
+        "BMI": "25.8",
+        "diabetespedigree": "0.587",
+        "age": "51"
+    },
+    {
+        "pregnancies": "0",
+        "glucose": "118",
+        "bloodpresure": "84",
+        "skinthickness": "47",
+        "insulin": "230",
+        "BMI": "45.8",
+        "diabetespedigree": "0.551",
+        "age": "31"
+    },
+    {
+        "pregnancies": "8",
+        "glucose": "99",
+        "bloodpresure": "84",
+        "skinthickness": "0",
+        "insulin": "0",
+        "BMI": "35.4",
+        "diabetespedigree": "0.388",
+        "age": "50"
+    },
+]
