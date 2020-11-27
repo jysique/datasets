@@ -328,7 +328,7 @@ func (self *NeuralNetwork) Train(start, fin int, inputs [][]float64, targets [][
 		if i%100 == 0 {
 			last_target := targets[len(targets)-1]
 			cur_err := self.CalcError(last_target)
-			fmt.Println("err: ", cur_err)
+			fmt.Println("err: ", cur_err, "i:", i)
 			if (old_err2-old_err1 < 0.001) && (old_err1-cur_err < 0.001) { //early stop
 				break
 			}
@@ -516,7 +516,7 @@ func Metrics(matrix [][]int) {
 
 func main() {
 	split := 0.8
-	columnsNamesNN, columnsNN, dataframeNN = readArchiveCSV("https://raw.githubusercontent.com/jysique/datasets/master/wbcd-data.csv")
+	columnsNamesNN, columnsNN, dataframeNN = readArchiveCSV("https://raw.githubusercontent.com/jysique/datasets/master/Dataset/wbcd-data.csv")
 	dataframeNN = normalizeData(dataframeNN)
 	dataTest, dataTrain = splitPercent(dataframeNN, split)
 	_, _, xDataTrain = splitColumns(columnsNamesNN, columnsNN, dataTrain, columnsNamesNN[:len(columnsNamesNN)-1])
@@ -541,40 +541,33 @@ func main() {
 	//Metrics(confusionMatrix)
 	//nn.Stop()
 	var option string
-	var train, retreat int
+	// var train, retreat int
 	local := os.Args[1]
 	remotes := os.Args[2:]
 	ch := make(chan Msg)
 	go server(local, remotes, xDataTrain, yDataTrain, *nn, ch)
 	fmt.Print("Your option:")
 	fmt.Scanf("%s", &option)
-	sendAll(option, local, remotes)
+	sendAll(option, local, remotes, *nn, xDataTest, yDataTest)
 
-	if option == "train" {
-		train = 1
-	} else {
-		retreat = 1
-	}
+	// if option == "train" {
+	// 	train = 1
+	// } else {
+	// 	retreat = 1
+	// }
 	for range remotes {
 		msg := <-ch
-		if msg.Option == "train" {
-			train++
+		if msg.Option == "test" {
+			fmt.Println("Test")
 		} else {
-			retreat++
+			// retreat++
 		}
 	}
-	if train > retreat {
-		fmt.Println("TRAIN!! ")
-	} else {
-		fmt.Println("run...")
-	}
-
-	predictedResults := nn.Test(xDataTest, yDataTest, false)
-
-	confusionMatrix = GetConfusionMatrix(predictedResults, yDataTest)
-	PrintConfusionMatrix(confusionMatrix)
-	Metrics(confusionMatrix)
-	nn.Stop()
+	// if train > retreat {
+	// 	fmt.Println("TRAIN!! ")
+	// } else {
+	// 	fmt.Println("run...")
+	// }
 }
 
 func server(local string, remotes []string, _Xdatatrain, _Ydatatrain [][]float64, _nn NeuralNetwork, ch chan Msg) {
@@ -617,22 +610,34 @@ func handle(conn net.Conn, local string, remotes []string, _Xdatatrain, _Ydatatr
 			//fmt.Println("comienza en: ", (res)*xsize, " termina en: ", (res+1)*xsize)
 			_nn.Train((res)*xsize, (res+1)*xsize, _Xdatatrain, _Ydatatrain, 1000)
 			//	printData((res)*xsize, (res+1)*xsize, _datatrain)
+			//sendAll("test", local, remotes)
 			ch <- msg
+		case "test":
+			fmt.Println("Termine 1")
 		}
-
 	}
 }
 
-func sendAll(option, local string, remotes []string) {
+func sendAll(option, local string, remotes []string, _nn NeuralNetwork, _Xdatatest, _Ydatatest [][]float64) {
 	for _, remote := range remotes {
-		send(local, remote, option)
+		send(local, remote, option, _nn, _Xdatatest, _Ydatatest)
 	}
 }
 
-func send(local, remote, option string) {
+func send(local, remote, option string, _nn NeuralNetwork, _Xdatatest, _Ydatatest [][]float64) {
+
 	if conn, err := net.Dial("tcp", remote); err == nil {
 		enc := json.NewEncoder(conn)
 		if err := enc.Encode(Msg{local, option}); err == nil {
+			switch option {
+			case "test":
+				predictedResults := _nn.Test(_Xdatatest, _Ydatatest, true)
+				confusionMatrix = GetConfusionMatrix(predictedResults, _Ydatatest)
+				PrintConfusionMatrix(confusionMatrix)
+				Metrics(confusionMatrix)
+				_nn.Stop()
+				fmt.Println("Termine 2")
+			}
 			fmt.Printf("Sending %s to %s\n", option, remote)
 		}
 	}
