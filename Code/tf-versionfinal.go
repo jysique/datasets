@@ -13,7 +13,21 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/labstack/echo"
 )
+
+type Data struct {
+	Pregnancies   float64 `json:"Pregnancies"`
+	Glucose       float64 `json:"Glucose"`
+	BloodPressure float64 `json:"BloodPressure"`
+	SkinThickness float64 `json:"SkinThickness"`
+	Insulin       float64 `json:"Insulin"`
+	BMI           float64 `json:"BMI"`
+	DPF           float64 `json:"DPF"`
+	Age           float64 `json:"Age"`
+	Outcome       float64 `json:"Outcome"`
+}
 
 var columnsNamesNN []string
 var columnsNN map[string]int
@@ -30,6 +44,8 @@ var yDataTrain [][]float64
 
 var predictedResults [][]float64
 var confusionMatrix [][]int
+
+var data Data
 
 func readArchiveCSV(url string) ([]string, map[string]int, [][]float64) {
 	resp, err := http.Get(url)
@@ -514,9 +530,26 @@ func Metrics(matrix [][]int) {
 	fmt.Printf("\tAccuracy: %.2f", Accuracy(matrix)*100)
 }
 
+func getData(c echo.Context) (err error) {
+	data := new(Data)
+	if err = c.Bind(data); err != nil {
+		return
+	}
+	return c.JSON(http.StatusOK, data)
+}
+
+func FloatToString(input_num []float64) string {
+	// to convert a float number to a string
+	var phrase string = ""
+	for i := 0; i < len(input_num); i++ {
+		phrase += " " + strconv.FormatFloat(input_num[i], 'f', 6, 64)
+	}
+	return phrase
+}
+
 func main() {
 	split := 0.8
-	columnsNamesNN, columnsNN, dataframeNN = readArchiveCSV("https://raw.githubusercontent.com/jysique/datasets/master/Dataset/wbcd-data.csv")
+	columnsNamesNN, columnsNN, dataframeNN = readArchiveCSV("https://raw.githubusercontent.com/jysique/datasets/master/Dataset/diabetes.csv")
 	dataframeNN = normalizeData(dataframeNN)
 	dataTest, dataTrain = splitPercent(dataframeNN, split)
 	_, _, xDataTrain = splitColumns(columnsNamesNN, columnsNN, dataTrain, columnsNamesNN[:len(columnsNamesNN)-1])
@@ -608,12 +641,27 @@ func handle(conn net.Conn, local string, remotes []string, _Xdatatrain, _Ydatatr
 			res1 := strings.SplitAfterN(local, "localhost:800", 2)
 			res, _ := strconv.Atoi(res1[1])
 			//fmt.Println("comienza en: ", (res)*xsize, " termina en: ", (res+1)*xsize)
-			_nn.Train((res)*xsize, (res+1)*xsize, _Xdatatrain, _Ydatatrain, 1000)
+			if res < 4 {
+				_nn.Train((res)*xsize, (res+1)*xsize, _Xdatatrain, _Ydatatrain, 1000)
+			} else {
+				_nn.Train((res)*xsize, len(_Xdatatrain)-1, _Xdatatrain, _Ydatatrain, 1000)
+			}
 			//	printData((res)*xsize, (res+1)*xsize, _datatrain)
 			//sendAll("test", local, remotes)
 			ch <- msg
 		case "test":
 			fmt.Println("Termine 1")
+		case "server":
+			e := echo.New()
+			e.GET("/prediction", func(c echo.Context) error {
+				array := [][]float64{{data.Pregnancies, data.Glucose, data.BloodPressure, data.SkinThickness, data.Insulin, data.BMI, data.DPF, data.Age}}
+				array2 := [][]float64{{data.Outcome}}
+				predictedResults2 := _nn.Test(array, array2, false)
+				return c.String(http.StatusOK, "La clase de la instancia es: "+FloatToString(_nn.ActiveFunction(predictedResults2[0])))
+			})
+			e.POST("/data", getData)
+
+			e.Start(":8080")
 		}
 	}
 }
@@ -631,11 +679,11 @@ func send(local, remote, option string, _nn NeuralNetwork, _Xdatatest, _Ydatates
 		if err := enc.Encode(Msg{local, option}); err == nil {
 			switch option {
 			case "test":
-				predictedResults := _nn.Test(_Xdatatest, _Ydatatest, true)
+				predictedResults := _nn.Test(_Xdatatest, _Ydatatest, false)
 				confusionMatrix = GetConfusionMatrix(predictedResults, _Ydatatest)
 				PrintConfusionMatrix(confusionMatrix)
 				Metrics(confusionMatrix)
-				_nn.Stop()
+				//_nn.Stop()
 				fmt.Println("Termine 2")
 			}
 			fmt.Printf("Sending %s to %s\n", option, remote)
